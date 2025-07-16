@@ -2,22 +2,22 @@ use anchor_lang::prelude::*;
 
 use anchor_spl::{
     associated_token::{AssociatedToken},
-    token_interface::{TokenAccount,Mint,TokenInterface,TransferChecked,transfer_checked}
+    token::{Burn,burn, transfer, Mint, Token, TokenAccount, Transfer},
 };
 
-use crate::{constants::*, state::*, error::*};
+use crate::{ state::*, error::*};
+use constant_product_curve::ConstantProduct;
 
 #[derive(Accounts)]
 pub struct Withdraw<'info>{
     #[account(mut)]
     pub initializer:Signer<'info>,
-    pub mint_x:InterfaceAccount<'info,TokenAccount>,
-    pub mint_y:InterfaceAccount<'info,TokenAccount>,
+    pub mint_x:Account<'info,TokenAccount>,
+    pub mint_y:Account<'info,TokenAccount>,
 
      #[account(
         has_one = mint_x,
         has_one = mint_y,
-        payer = initializer,
         seeds = [b"config",config.seed.to_le_bytes().as_ref()],
         bump = config.config_bump,
     )]
@@ -28,14 +28,14 @@ pub struct Withdraw<'info>{
         associated_token::mint = mint_x,
         associated_token::authority = config,
     )]
-    pub vault_x:InterfaceAccount<'info,TokenAccount>,
+    pub vault_x:Account<'info,TokenAccount>,
 
     #[account(
         mut,
         associated_token::mint = mint_y,
         associated_token::authority = config,
     )]
-    pub vault_y:InterfaceAccount<'info,TokenAccount>,
+    pub vault_y:Account<'info,TokenAccount>,
 
 
     #[account(
@@ -43,22 +43,22 @@ pub struct Withdraw<'info>{
         associated_token::mint = mint_x,
         associated_token::authority = initializer,
     )]
-    pub user_x:InterfaceAccount<'info,TokenAccount>,
+    pub user_x:Account<'info,TokenAccount>,
 
     #[account(
         mut,
         associated_token::mint = mint_y,
         associated_token::authority = initializer,
     )]
-    pub user_y:InterfaceAccount<'info,TokenAccount>,
+    pub user_y:Account<'info,TokenAccount>,
 
     #[account(
         mut,
-        seeds=[b"lp",config.key().as_ref()],
+        seeds=[b"lp_mint",config.key().as_ref()],
         bump = config.lp_bump,
         
     )]
-    pub lp_mint:InterfaceAccount<'info,Mint>,
+    pub lp_mint:Account<'info,Mint>,
 
 
     #[account(
@@ -66,10 +66,10 @@ pub struct Withdraw<'info>{
         associated_token::mint = lp_mint,
         associated_token::authority = initializer,
     )]
-    pub user_lp:InterfaceAccount<'info,TokenAccount>,
+    pub user_lp:Account<'info,TokenAccount>,
 
     pub system_program:Program<'info,System>,
-    pub token_program:Program<'info,TokenInterface>,
+    pub token_program:Program<'info,Token>,
     pub associated_token_program:Program<'info,AssociatedToken>,
 
 }
@@ -80,21 +80,35 @@ impl<'info> Withdraw<'info>{
         require!(amount>0,AmmError::InvalidAmount);
         require!(self.config.is_locked,AmmError::PoolLocked);
 
-        let (amount_x,amount_y) = 
+        let amounts = ConstantProduct::xy_withdraw_amounts_from_l(
+            self.vault_x.amount,
+            self.vault_y.amount,
+            self.lp_mint.supply,
+            amount,
+            6
+        ).map_err(AmmError::from)?;
+
+        require!(amounts.x>=min_x && amounts.y>=min_y,AmmError::SlippageExceeded);
+        
+        self.withdraw_token(true,amounts.x)?;
+        self.withdraw_token(false,amounts.y)?;
+
+        self.burn(amount)?;
+        Ok(())
 
     }
 
 
 
-    pub fn withdraw_token(&self,isX:bool,amount:u64)->Result<()>{
-        let (from ,to) = match (is_x){
+    pub fn withdraw_token(&self,is_x:bool,amount:u64)->Result<()>{
+        let (from ,to) = match is_x {
             true => (self.vault_x.to_account_info(),self.user_x.to_account_info()),
             false => (self.vault_y.to_account_info(),self.user_y.to_account_info()),
         };
 
         let cpi_program = self.token_program.to_account_info();
 
-        let cpi_accounts = TransferChecked{
+        let cpi_accounts = Transfer{
             from, 
             to, authority:self.config.to_account_info(),
 
@@ -110,8 +124,9 @@ impl<'info> Withdraw<'info>{
 
         let ctx = CpiContext::new_with_signer(cpi_program,cpi_accounts,signer_seeds);
 
-        transfer_checked(ctx,amount)?;
+        transfer(ctx,amount)?;
 
+        Ok(())
     }
 
 
@@ -120,12 +135,14 @@ impl<'info> Withdraw<'info>{
 
         let cpi_accounts  =Burn{
             from:self.user_lp.to_account_info(),
-            mint:self.mint_lp.to_account_info(),
+            mint:self.lp_mint.to_account_info(),
             authority:self.initializer.to_account_info(),
         };
 
         let ctx = CpiContext::new(cpi_program,cpi_accounts);
         burn(ctx,amount)?;
+
+        Ok(())
     }
 
 }
