@@ -4,7 +4,7 @@ import {
   getOrCreateAssociatedTokenAccount,
   mintToChecked,
 } from "@solana/spl-token";
-import { LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { Connection, LAMPORTS_PER_SOL } from "@solana/web3.js";
 const provider = anchor.AnchorProvider.env();
 export const airdrop = async (to: anchor.web3.PublicKey, amount: number) => {
   try {
@@ -42,7 +42,7 @@ export const create_associated_token_account = async (
   owner: anchor.web3.PublicKey
 ) => {
   try {
-    const vault = await getOrCreateAssociatedTokenAccount(
+    const ata = await getOrCreateAssociatedTokenAccount(
       provider.connection,
       user,
       mint_acc,
@@ -50,8 +50,9 @@ export const create_associated_token_account = async (
       true
     );
 
+    if (!ata) throw new Error("ata not created");
 
-    return vault;
+    return ata;
   } catch (error) {
     console.log(error);
   }

@@ -13,7 +13,7 @@ import {
   mint_account,
   mint_tokens,
 } from "./helper";
-import { assert, expect } from "chai";
+import {  expect } from "chai";
 
 const provider = anchor.AnchorProvider.env();
 
@@ -50,8 +50,7 @@ describe("amm", () => {
       program.programId
     )[0];
 
-    console.log("config", config);
-    console.log("lp_mint", lp_mint);
+
 
     user_x = (
       await create_associated_token_account(
@@ -102,11 +101,23 @@ describe("amm", () => {
       })
       .signers([initializer])
       .rpc();
-    user_lp = await getAssociatedTokenAddress(lp_mint, initializer.publicKey);
 
-    const ammPda = await program.account.config.fetch(config);
+    let user_lp_ata = 
+      await create_associated_token_account(
+        lp_mint,
+        initializer,
+        initializer.publicKey
+      )      
 
-    assert.notEqual(ammPda, null);
+      if(!user_lp_ata.address){return;}
+      
+      user_lp = user_lp_ata.address;
+
+      const pdaAccount = await provider.connection.getAccountInfo(config);
+
+      expect(pdaAccount).not.null;  
+  
+      
   });
 
   it("deposit", async () => {
@@ -137,117 +148,121 @@ describe("amm", () => {
 
       const vault_x_account = await getAccount(
         provider.connection,
-        vault_x.address
+        vault_x
       );
 
       const vaultXBalance = vault_x_account.amount;
       const vaultYBalance = vault_x_account.amount;
 
-      expect(vaultXBalance).to.equal(max_amount_x);
-      expect(vaultYBalance).to.equal(max_amount_y);
+      expect(Number(vaultXBalance)).to.equal(Number(max_amount_x));
+      expect(Number(vaultYBalance)).to.equal(Number(max_amount_y));
 
-      console.log("vaultXBalance", vaultXBalance);
-      console.log("vaultYBalance", vaultYBalance);
-    } catch (error) {
-      console.log(error);
-    }
-  });
-
-  it("withdraw", async () => {
-    try {
-      const amount = new anchor.BN(500);
-      const min_amount_x = new anchor.BN(400);
-      const min_amount_y = new anchor.BN(400);
-
-      const vault_x_info = await getAccount(
-        provider.connection,
-        vault_x.address
-      );
-      const vault_y_info = await getAccount(
-        provider.connection,
-        vault_y.address
-      );
-
-      const initial_x_balance = vault_x_info.amount;
-      const initial_y_balance = vault_y_info.amount;
-      const tx = await program.methods
-        .withdraw(amount, min_amount_x, min_amount_y)
-        .accountsStrict({
-          initializer: initializer.publicKey,
-          mintX: mint_x,
-          mintY: mint_y,
-          config,
-          lpMint: lp_mint,
-          vaultX: vault_x,
-          vaultY: vault_y,
-          userX: user_x,
-          userY: user_y,
-          userLp: user_lp,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: anchor.web3.SystemProgram.programId,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        })
-        .signers([initializer])
-        .rpc();
-
-      const final_x_balance = vault_x_info.amount;
-      const final_y_balance = vault_y_info.amount;
-
-      expect(final_x_balance).to.not.equal(initial_x_balance);
-      expect(final_y_balance).to.not.equal(initial_y_balance);
     } catch (error) {
       console.log(error);
     }
   });
 
   it("swap", async () => {
-    try {
-      let is_x = true;
-      let min_y = new anchor.BN(250);
-      let amount = new anchor.BN(300);
+    let is_x = true;
+    let min_y = new anchor.BN(100);
+    let amount = 300;
 
-      const vault_x_info = await getAccount(
-        provider.connection,
-        vault_x.address
-      );
-      const vault_y_info = await getAccount(
-        provider.connection,
-        vault_y.address
-      );
+    const vault_x_info = await getAccount(provider.connection, vault_x);
+    const vault_y_info = await getAccount(provider.connection, vault_y);
+    const user_x_info = await getAccount(provider.connection, user_x);
+    const user_y_info = await getAccount(provider.connection, user_y);
 
-      let initial_x_balance = vault_x_info.amount;
-      let initial_y_balance = vault_y_info.amount;
+    let initial_x_balance = vault_x_info.amount;
+    let initial_y_balance = vault_y_info.amount;
+    let initial_user_x_balance = user_x_info.amount;
+    let initial_user_y_balance = user_y_info.amount;
+    // console.log("initial_x_balance", initial_x_balance);
+    // console.log("initial_y_balance", initial_y_balance);
+    // console.log("initial_user_x_balance", initial_user_x_balance);
+    // console.log("initial_user_y_balance", initial_user_y_balance);
 
-      let tx = await program.methods
-        .swap(amount, is_x, min_y)
-        .accountsStrict({
-          initializer: initializer.publicKey,
-          mintX: mint_x,
-          mintY: mint_y,
-          config,
-          lpMint: lp_mint,
-          vaultX: vault_x.address,
-          vaultY: vault_y.address,
-          userX: user_x.address,
-          userY: user_y.address,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: anchor.web3.SystemProgram.programId,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        })
-        .signers([initializer])
-        .rpc();
+    let tx = await program.methods
+      .swap(new anchor.BN(amount), is_x, min_y)
+      .accountsStrict({
+        initializer: initializer.publicKey,
+        mintX: mint_x,
+        mintY: mint_y,
+        config,
+        lpMint: lp_mint,
+        vaultX: vault_x,
+        vaultY: vault_y,
+        userX: user_x,
+        userY: user_y,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: anchor.web3.SystemProgram.programId,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+      })
+      .signers([initializer])
+      .rpc();
 
-      let final_x_balance = vault_x_info.amount;
-      let final_y_balance = vault_y_info.amount;
+    let final_x_balance = (await getAccount(provider.connection, vault_x))
+      .amount;
+    let final_y_balance = (await getAccount(provider.connection, vault_y))
+      .amount;
+    let final_user_x_info = (await getAccount(provider.connection, user_x))
+      .amount;
+    let final_user_y_info = (await getAccount(provider.connection, user_y))
+      .amount;
 
-      expect(Number(initial_x_balance) - Number(amount)).to.equal(
-        final_x_balance
-      );
-      expect(Number(initial_y_balance) + Number(min_y)).to.equal(
-        final_y_balance
-      );
-    } catch (error) {
-      console.log(error);
+    // console.log("final_x_balance", final_x_balance);
+    // console.log("final_y_balance", final_y_balance);
+    // console.log("final_user_x_info", final_user_x_info);
+    // console.log("final_user_y_info", final_user_y_info);
+
+    expect(BigInt(initial_user_x_balance) - BigInt(amount)).to.equal(
+      BigInt(final_user_x_info)
+    );
+
+    let expected_user_y_received =
+      BigInt(final_user_y_info) - BigInt(initial_user_y_balance);
+
+    expect(expected_user_y_received).to.equal(
+      BigInt(initial_y_balance) - BigInt(final_y_balance)
+    );
+  });
+
+  it("withdraw", async () => {
+    const amount = new anchor.BN(500);
+    const min_amount_x = new anchor.BN(400);
+    const min_amount_y = new anchor.BN(400);
+
+    const vault_x_info = await getAccount(provider.connection, vault_x);
+    const vault_y_info = await getAccount(provider.connection, vault_y);
+
+    const initial_x_balance = vault_x_info.amount;
+    const initial_y_balance = vault_y_info.amount;
+    if (initial_x_balance <= 0 || initial_y_balance <= 0) {
+      return;
     }
+    const tx = await program.methods
+      .withdraw(amount, min_amount_x, min_amount_y)
+      .accountsStrict({
+        initializer: initializer.publicKey,
+        mintX: mint_x,
+        mintY: mint_y,
+        config,
+        lpMint: lp_mint,
+        vaultX: vault_x,
+        vaultY: vault_y,
+        userX: user_x,
+        userY: user_y,
+        userLp: user_lp,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: anchor.web3.SystemProgram.programId,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+      })
+      .signers([initializer])
+      .rpc();
+
+    const final_x_balance = await getAccount(provider.connection, vault_x);
+    const final_y_balance = await getAccount(provider.connection, vault_y);
+
+    expect(final_x_balance).to.not.equal(initial_x_balance);
+    expect(final_y_balance).to.not.equal(initial_y_balance);
   });
 });

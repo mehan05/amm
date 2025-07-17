@@ -80,7 +80,7 @@ impl<'info> Deposit<'info>{
 
 
     pub fn deposit(&mut self, amount:u64, max_amount_x:u64, max_amount_y:u64 )->Result<()>{
-        require!(self.config.is_locked==false,AmmError::PoolLocked);
+        require!(!self.config.is_locked,AmmError::PoolLocked);
         require!(amount>0,AmmError::InvalidAmount);
 
         let (x_amount,y_amount) = match self.lp_mint.supply==0 && self.vault_x.amount==0 && self.vault_y.amount==0 {

@@ -78,7 +78,7 @@ impl<'info> Withdraw<'info>{
 
     pub fn withdraw(&mut self, amount:u64, min_x:u64, min_y:u64)->Result<()>{
         require!(amount>0,AmmError::InvalidAmount);
-        require!(self.config.is_locked,AmmError::PoolLocked);
+        require!(!self.config.is_locked,AmmError::PoolLocked);
 
         let amounts = ConstantProduct::xy_withdraw_amounts_from_l(
             self.vault_x.amount,
@@ -116,7 +116,7 @@ impl<'info> Withdraw<'info>{
 
         let seeds = [
             &b"config"[..],
-            &self.config.key().to_bytes(),
+            &self.config.seed.to_le_bytes(),
             &[self.config.config_bump]   
         ];
         
