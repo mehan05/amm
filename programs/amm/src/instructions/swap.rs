@@ -13,8 +13,8 @@ use crate::{ state::*, error::*};
 pub struct Swap<'info>{
     #[account(mut)]
     pub initializer:Signer<'info>,
-    pub mint_x:Account<'info,TokenAccount>,
-    pub mint_y:Account<'info,TokenAccount>,
+    pub mint_x:Account<'info,Mint>,
+    pub mint_y:Account<'info,Mint>,
 
     #[account(
         has_one = mint_x,

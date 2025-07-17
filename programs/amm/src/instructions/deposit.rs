@@ -14,8 +14,8 @@ pub struct Deposit<'info>{
 
     #[account(mut)]
     pub initializer:Signer<'info>,
-    pub mint_x: Account<'info,TokenAccount>,
-    pub mint_y:Account<'info,TokenAccount>,
+    pub mint_x: Account<'info,Mint>,
+    pub mint_y:Account<'info,Mint>,
 
 
     #[account(
